@@ -11,6 +11,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 #include <vector>
 #include <list>
 #include <string>
@@ -50,53 +51,257 @@ public:
 
 #endif /* __PROGTEST__ */
 
-class Attr {
+CRect copyCRect(const CRect &cRect) {
+    return {cRect.m_X, cRect.m_Y, cRect.m_W, cRect.m_H};
+}
 
+class Attr {
+public:
+    Attr(int id, const CRect &pos, const string & txt): id(id), pos(copyCRect(pos)), absPos(copyCRect(pos)), txt(txt), printConf(1), positionChanged(false) {}
+    Attr(const Attr & attr): id(attr.id), pos(copyCRect(attr.pos)), absPos(copyCRect(pos)), txt(attr.txt), printConf(attr.printConf), positionChanged(attr.positionChanged) {
+    };
+    void swapAttr(Attr & attr) {
+        swap(id, attr.id);
+        swap(pos, attr.pos);
+        swap(absPos, attr.absPos);
+        swap(txt, attr.txt);
+        swap(printConf, attr.printConf);
+        swap(positionChanged, attr.positionChanged);
+    }
+    virtual ~Attr() noexcept = default;
+    virtual Attr * clone() const = 0;
+    virtual ostream &print(ostream &out) const = 0;
+    void attrString(const string & attrName, ostream &out, bool printTxt=true, bool convertAbs=true) const {
+        out << "[" << id << "] " << attrName << " ";
+        if (printTxt) {
+            out << "\"" << txt << "\" ";
+        }
+        out << (convertAbs ? calculateAbsolutePosition() : pos) << endl;
+    }
+
+    CRect calculateAbsolutePosition() const {
+        return {absPos.m_X + pos.m_X * absPos.m_W, absPos.m_Y + pos.m_Y * absPos.m_H,
+                    pos.m_W * absPos.m_W, pos.m_H * absPos.m_H};
+    }
+
+    int getId() const {
+        return id;
+    }
+
+    void setPrintConf(int conf) {
+        printConf = conf;
+    }
+
+    void setAbsPos(const CRect & pos) {
+        absPos = copyCRect(pos);
+    }
+
+protected:
+    int id;
+    CRect pos;
+    CRect absPos;
+    string txt;
+    int printConf;
+    bool positionChanged;
 };
 
-class CWindow {
+
+class CWindow: public Attr {
 public:
     CWindow(int id,
             const string &title,
-            const CRect &absPos);
+            const CRect &absPos): Attr(id, absPos, title) {};
+
+    CWindow(const CWindow & cw): Attr(cw) {
+        copyMap(cw);
+    }
+
+    CWindow & operator=(CWindow cw) {
+        swapAttr(cw);
+        swap(windowAttributes, cw.windowAttributes);
+        return *this;
+    }
+
+    void copyMap(const CWindow & cw) {
+        map<int, Attr *> newWindowAttributes;
+
+        for (const auto [id, attr]: cw.windowAttributes) {
+            newWindowAttributes[id] = attr->clone();
+        }
+        windowAttributes = newWindowAttributes;
+    }
+
+    CWindow * clone() const override{
+        return new CWindow(*this);
+    }
+
     // add
+    CWindow & add(const Attr & attr) {
+        int attrId = attr.getId();
+
+        if (windowAttributes.find(attrId) == windowAttributes.end()) {
+            windowAttributes[attrId] = attr.clone();
+        }
+
+        return *this;
+    }
+
     // search
+    Attr * search(int id) {
+        if (windowAttributes.find(id) == windowAttributes.end()) {
+            return nullptr;
+        }
+        windowAttributes[id]->setAbsPos(pos);
+        windowAttributes[id]->setPrintConf(1);
+
+        return windowAttributes[id];
+    }
+
     // setPosition
+    Attr & setPosition(const CRect & newPos) {
+        pos = copyCRect(newPos);
+        return *this;
+    }
+
+    [[nodiscard]] ostream &print(ostream &out) const override
+    {
+        attrString("Window", out, true, false);
+        int counter = 0;
+
+        for (const auto [id, attr]: windowAttributes) {
+            counter++;
+            (counter == windowAttributes.size()) ? attr->setPrintConf(3) : attr->setPrintConf(2);
+            attr->setAbsPos(pos);
+            out << "+- ";
+            attr->print(out);
+        }
+
+        return out;
+    }
+private:
+    map<int, Attr *> windowAttributes;
 };
 
-class CButton {
+class CButton: public Attr {
 public:
     CButton(int id,
             const CRect &relPos,
-            const string &name);
+            const string &name): Attr(id, relPos, name) {};
+
+    CButton * clone() const override{
+        return new CButton(*this);
+    }
+
+    [[nodiscard]] ostream &print(ostream &out) const override
+    {
+        attrString("Button", out);
+        return out;
+    }
 };
 
-class CInput {
+class CInput: public Attr {
 public:
     CInput(int id,
            const CRect &relPos,
-           const string &value);
-    // setValue 
-    // getValue 
+           const string &value): Attr(id, relPos, value) {};
+
+    CInput * clone() const override{
+        return new CInput(*this);
+    }
+
+    // setValue
+    CInput & setValue(const string &value) {
+        txt = value;
+        return *this;
+    }
+
+    // getValue
+    [[nodiscard]] string getValue() const {
+        return txt;
+    }
+
+    [[nodiscard]] ostream &print(ostream &out) const override
+    {
+        attrString("Input", out);
+        return out;
+    }
 };
 
-class CLabel {
+class CLabel: public Attr {
 public:
     CLabel(int id,
            const CRect &relPos,
-           const string &label);
+           const string &label): Attr(id, relPos, label) {};
+
+    CLabel * clone() const override{
+        return new CLabel(*this);
+    }
+
+    [[nodiscard]] ostream &print(ostream &out) const override
+    {
+        attrString("Label", out);
+        return out;
+    }
 };
 
-class CComboBox {
+class CComboBox: public Attr {
 public:
     CComboBox(int id,
-              const CRect &relPos);
-    // add                                                                            
+              const CRect &relPos): Attr(id, relPos, ""), selectedIndex(0) {
+        setPrintConf(2);
+    };
+
+    CComboBox * clone() const override{
+        return new CComboBox(*this);
+    }
+
+    // add
+    CComboBox & add(const string & box) {
+        boxes.push_back(box);
+
+        return *this;
+    }
+
     // setSelected
+    CComboBox & setSelected(int x) {
+        selectedIndex = x;
+        return *this;
+    }
+
     // getSelected
+    [[nodiscard]] int getSelected() const {
+        return selectedIndex;
+    }
+
+    // 1 = without spaces, 2 = with |, 3 = with spaces
+    [[nodiscard]] ostream &print(ostream &out) const override
+    {
+        attrString("ComboBox", out, false);
+        for (size_t i=0; i<boxes.size(); i++) {
+            if (printConf == 2) {
+                out << "|  ";
+            }
+            else if (printConf == 3) {
+                out << "   ";
+            }
+            if (i == selectedIndex) {
+                out << "+->" << boxes[i] << "<" << endl;
+            }
+            else {
+                out << "+- " << boxes[i] << endl;
+            }
+        }
+        return out;
+    }
+private:
+    vector<string> boxes;
+    int selectedIndex;
 };
 
 // output operators
+ostream &operator<<(ostream &out, const Attr &self) {
+    return self.print(out);
+}
 
 #ifndef __PROGTEST__
 
@@ -112,6 +317,7 @@ int main(void) {
     assert (sizeof(CInput) - sizeof(string) < sizeof(CComboBox) - sizeof(vector<string>));
     assert (sizeof(CLabel) - sizeof(string) < sizeof(CComboBox) - sizeof(vector<string>));
     CWindow a(0, "Sample window", CRect(10, 10, 600, 480));
+    // 10 + 0.1 * 600
     a.add(CButton(1, CRect(0.1, 0.8, 0.3, 0.1), "Ok")).add(CButton(2, CRect(0.6, 0.8, 0.3, 0.1), "Cancel"));
     a.add(CLabel(10, CRect(0.1, 0.1, 0.2, 0.1), "Username:"));
     a.add(CInput(11, CRect(0.4, 0.1, 0.5, 0.1), "chucknorris"));
