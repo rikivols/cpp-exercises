@@ -69,7 +69,7 @@ public:
         swap(positionChanged, attr.positionChanged);
     }
     virtual ~Attr() noexcept = default;
-    virtual Attr * clone() const = 0;
+    virtual shared_ptr<Attr> clone() const = 0;
     virtual ostream &print(ostream &out) const = 0;
     void attrString(const string & attrName, ostream &out, bool printTxt=true, bool convertAbs=true) const {
         out << "[" << id << "] " << attrName << " ";
@@ -123,16 +123,16 @@ public:
     }
 
     void copyMap(const CWindow & cw) {
-        map<int, Attr *> newWindowAttributes;
+        map<int, shared_ptr<Attr>> newWindowAttributes;
 
-        for (const auto [id, attr]: cw.windowAttributes) {
+        for (const auto &[id, attr]: cw.windowAttributes) {
             newWindowAttributes[id] = attr->clone();
         }
-        windowAttributes = newWindowAttributes;
+        swap(windowAttributes, newWindowAttributes);
     }
 
-    CWindow * clone() const override{
-        return new CWindow(*this);
+    [[nodiscard]] shared_ptr<Attr> clone() const override{
+        return make_shared<CWindow>(*this);
     }
 
     // add
@@ -147,7 +147,7 @@ public:
     }
 
     // search
-    Attr * search(int id) {
+    shared_ptr<Attr> search(int id) {
         if (windowAttributes.find(id) == windowAttributes.end()) {
             return nullptr;
         }
@@ -166,9 +166,9 @@ public:
     [[nodiscard]] ostream &print(ostream &out) const override
     {
         attrString("Window", out, true, false);
-        int counter = 0;
+        size_t counter = 0;
 
-        for (const auto [id, attr]: windowAttributes) {
+        for (const auto &[id, attr]: windowAttributes) {
             counter++;
             (counter == windowAttributes.size()) ? attr->setPrintConf(3) : attr->setPrintConf(2);
             attr->setAbsPos(pos);
@@ -179,7 +179,7 @@ public:
         return out;
     }
 private:
-    map<int, Attr *> windowAttributes;
+    map<int, shared_ptr<Attr>> windowAttributes;
 };
 
 class CButton: public Attr {
@@ -188,8 +188,8 @@ public:
             const CRect &relPos,
             const string &name): Attr(id, relPos, name) {};
 
-    CButton * clone() const override{
-        return new CButton(*this);
+    [[nodiscard]] shared_ptr<Attr> clone() const override{
+        return make_shared<CButton>(*this);
     }
 
     [[nodiscard]] ostream &print(ostream &out) const override
@@ -197,6 +197,8 @@ public:
         attrString("Button", out);
         return out;
     }
+private:
+    int trash=0;
 };
 
 class CInput: public Attr {
@@ -205,8 +207,8 @@ public:
            const CRect &relPos,
            const string &value): Attr(id, relPos, value) {};
 
-    CInput * clone() const override{
-        return new CInput(*this);
+    [[nodiscard]] shared_ptr<Attr> clone() const override{
+        return make_shared<CInput>(*this);
     }
 
     // setValue
@@ -225,6 +227,8 @@ public:
         attrString("Input", out);
         return out;
     }
+private:
+    int trash=0;
 };
 
 class CLabel: public Attr {
@@ -233,8 +237,8 @@ public:
            const CRect &relPos,
            const string &label): Attr(id, relPos, label) {};
 
-    CLabel * clone() const override{
-        return new CLabel(*this);
+    [[nodiscard]] shared_ptr<Attr> clone() const override{
+        return make_shared<CLabel>(*this);
     }
 
     [[nodiscard]] ostream &print(ostream &out) const override
@@ -242,6 +246,8 @@ public:
         attrString("Label", out);
         return out;
     }
+private:
+    int trash=0;
 };
 
 class CComboBox: public Attr {
@@ -251,8 +257,8 @@ public:
         setPrintConf(2);
     };
 
-    CComboBox * clone() const override{
-        return new CComboBox(*this);
+    [[nodiscard]] shared_ptr<Attr> clone() const override{
+        return make_shared<CComboBox>(*this);
     }
 
     // add
@@ -277,7 +283,7 @@ public:
     [[nodiscard]] ostream &print(ostream &out) const override
     {
         attrString("ComboBox", out, false);
-        for (size_t i=0; i<boxes.size(); i++) {
+        for (int i=0; i<(int)boxes.size(); i++) {
             if (printConf == 2) {
                 out << "|  ";
             }
