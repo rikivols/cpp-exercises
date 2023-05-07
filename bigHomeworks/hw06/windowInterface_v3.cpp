@@ -38,17 +38,29 @@ public:
 
 #endif /* __PROGTEST__ */
 
-CRect calculateAbsolutePosition(const CRect & absolutePosition, const CRect & position) {
-    return {absolutePosition.m_X + position.m_X * absolutePosition.m_W, absolutePosition.m_Y + position.m_Y * absolutePosition.m_H,
-            position.m_W * absolutePosition.m_W, position.m_H * absolutePosition.m_H};
+/**
+ * Calculates absolute position of an element based on the absolute position of a window/panel it's in and 
+ * relative position of the element itself.
+ * @param absolutePosition absolute position of a container that the element is located in
+ * @param relativePosition relative position of an element to the container
+ * @return Newly calculated absolute position of the element.
+ */
+CRect calculateAbsolutePosition(const CRect & absolutePosition, const CRect & relativePosition) {
+    return {absolutePosition.m_X + relativePosition.m_X * absolutePosition.m_W,
+            absolutePosition.m_Y + relativePosition.m_Y * absolutePosition.m_H,
+            relativePosition.m_W * absolutePosition.m_W, relativePosition.m_H * absolutePosition.m_H};
 }
 
-CRect getNewAbsolutePosition(const CRect & posInp, const CRect & absPosInp) {
-    return {absPosInp.m_X + posInp.m_X * absPosInp.m_W, absPosInp.m_Y + posInp.m_Y * absPosInp.m_H,
-            posInp.m_W * absPosInp.m_W, posInp.m_H * absPosInp.m_H};
-}
-
-ostream & printStringSpaces(ostream & out, const vector<bool> & isPipe, bool ignoreLast=false) {
+/**
+ * Prints space separators for the elements, so they appear in nested form. We also make a distinction
+ * between spaces and pipes. That part is controlled by isPipe vector
+ * @param out output stream that's being modified by the function 
+ * @param isPipe boolean vector that decides whether the given position is a pipe or space
+ * @param ignoreLast parameter used for ignoring the last isPipe value. The last isPipe value is reserved
+ *                   and used only for the combobox elements
+ * @return Output stream containing the element's spaces.
+ */
+ostream & printElementPrefix(ostream & out, const vector<bool> & isPipe, bool ignoreLast=false) {
     for(size_t i=0; i<isPipe.size(); i++) {
         if (ignoreLast && i == isPipe.size() -1) {
             continue;
@@ -65,216 +77,114 @@ ostream & printStringSpaces(ostream & out, const vector<bool> & isPipe, bool ign
 }
 
 
-class AttributeBase {
+class CAttributeBase {
 public:
-    virtual ~AttributeBase() noexcept = default;
-    virtual shared_ptr<AttributeBase> clone() const = 0;
+    virtual ~CAttributeBase() noexcept = default;
+    virtual shared_ptr<CAttributeBase> clone() const = 0;
     virtual ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const = 0;
-    virtual const vector<shared_ptr<AttributeBase>> &getGroupAttributes() const = 0;
+    virtual const vector<shared_ptr<CAttributeBase>> &getGroupAttributes() const = 0;
     virtual int getId() const = 0;
-    virtual void setAbsPos(const CRect & poss) = 0;
+    virtual void setParentPos(const CRect & poss) = 0;
     virtual const CRect & getPos() const = 0;
 };
 
 
-class Attribute: public AttributeBase {
+class CAttribute: public CAttributeBase {
 public:
-    Attribute(int id, const CRect &pos, string txt): id(id),
-                                    pos(pos), absPos(pos), txt(std::move(txt)){};
+    CAttribute(int id, const CRect &pos, string txt): m_Id(id),
+                                                      M_Pos(pos), m_ParentPos(pos), txt(std::move(txt)){};
 
-    Attribute(const Attribute & attr): id(attr.id), pos(attr.pos), absPos(pos), txt(attr.txt){};
+    CAttribute(const CAttribute & attr): m_Id(attr.m_Id), M_Pos(attr.M_Pos), m_ParentPos(attr.M_Pos), txt(attr.txt){};
 
-    void swapAttribute(Attribute & attr) {
-        swap(id, attr.id);
-        swap(pos, attr.pos);
-        swap(absPos, attr.absPos);
+    void swapAttribute(CAttribute & attr) {
+        swap(m_Id, attr.m_Id);
+        swap(M_Pos, attr.M_Pos);
+        swap(m_ParentPos, attr.m_ParentPos);
         swap(txt, attr.txt);
     }
 
-    ~Attribute() noexcept override = default;
+    ~CAttribute() noexcept override = default;
 
-    const vector<shared_ptr<AttributeBase>> &getGroupAttributes() const override {
-        static const vector<shared_ptr<AttributeBase>> tempVector;
+    const vector<shared_ptr<CAttributeBase>> &getGroupAttributes() const override {
+        static const vector<shared_ptr<CAttributeBase>> tempVector;
         return tempVector;
     };
 
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
-        return make_shared<Attribute>(*this);
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
+        return make_shared<CAttribute>(*this);
     }
 
     ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override {
-        printAttribute("Panel", out, isPipe, false, false, true);
+        printAttribute("Panel", out, isPipe, false, true);
         return out;
     };
 
-    void printAttribute(const string & attrName, ostream &out, const vector<bool> & isPipe, bool ignorePrefix=false, bool printTxt=true, bool convertAbs=true) const {
-        printStringSpaces(out, isPipe, true);
+    void printAttribute(const string & attrName, ostream &out, const vector<bool> & isPipe, bool ignorePrefix=false, bool convertAbs=true) const {
+        printElementPrefix(out, isPipe, true);
         if (!ignorePrefix) {
             out << "+- ";
         }
-        out << "[" << id << "] " << attrName << " ";
-        if (printTxt) {
+        out << "[" << m_Id << "] " << attrName << " ";
+        if (!txt.empty()) {
             out << "\"" << txt << "\" ";
         }
-        out << (convertAbs ? calculateAbsolutePosition(absPos, pos) : pos) << endl;
+        out << (convertAbs ? calculateAbsolutePosition(m_ParentPos, M_Pos) : M_Pos) << endl;
     }
 
     int getId() const override{
-        return id;
+        return m_Id;
     }
 
-    void setAbsPos(const CRect & poss) override {
-        absPos = poss;
+    void setParentPos(const CRect & parentPos) override {
+        m_ParentPos = parentPos;
     }
 
     const CRect & getPos() const override {
-        return pos;
+        return M_Pos;
     }
 
 protected:
-    int id;
-    CRect pos;
-    CRect absPos;
+    int m_Id;
+    CRect M_Pos;
+    CRect m_ParentPos;
     string txt;
 };
 
-class CWindow: public Attribute {
+class CAttributeContainer: public CAttribute {
 public:
-    CWindow(int id,
-            const string &title,
-            const CRect &absPos): Attribute(id, absPos, title) {};
+    CAttributeContainer(int id,
+                       const string &title,
+                       const CRect &relPos): CAttribute(id, relPos, title) {};
 
-    CWindow(const CWindow & cw): Attribute(cw) {
+    CAttributeContainer(const CAttributeContainer & cw): CAttribute(cw) {
         copyVec(cw);
     }
 
-    CWindow & operator=(CWindow cw) {
-        swapAttribute(cw);
-        swap(groupedAttributes, cw.groupedAttributes);
-        return *this;
-    }
+    CAttributeContainer &operator=(const CAttributeContainer &attr) = delete;
+    CAttributeContainer &operator=(CAttributeContainer &&attr) noexcept = delete;
 
-    void copyVec(const CWindow & cw) {
-        vector<shared_ptr<AttributeBase>> newWindowAttributes;
+    const vector<shared_ptr<CAttributeBase>> &getGroupAttributes() const override {
+        return attributes;
+    };
 
-        for (const auto& attr : cw.groupedAttributes) {
+    void copyVec(const CAttributeContainer & cw) {
+        vector<shared_ptr<CAttributeBase>> newWindowAttributes;
+
+        for (const auto& attr : cw.attributes) {
             newWindowAttributes.push_back(attr->clone());
         }
-        swap(groupedAttributes, newWindowAttributes);
+        swap(attributes, newWindowAttributes);
     }
 
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
-        return make_shared<CWindow>(*this);
-    }
-
-    // add
-    CWindow & add(const Attribute & attr) {
-        groupedAttributes.push_back(attr.clone());
-
-        return *this;
-    }
-
-    shared_ptr<AttributeBase> recurSearch(int id, vector<shared_ptr<AttributeBase>> & tempWindowAttribute, CRect absPos) {
-
-        for (const auto &attr: tempWindowAttribute) {
-            if (attr->getId() == id) {
-                attr->setAbsPos(absPos);
-                return attr;
-            }
-            auto nextWindow = attr->getGroupAttributes();
-            if (!nextWindow.empty()) {
-                return recurSearch(id, nextWindow, getNewAbsolutePosition(attr->getPos(), absPos));
-            }
-        }
-        return nullptr;
-
-    }
-
-    // search
-    shared_ptr<AttributeBase> search(int id) {
-        vector<shared_ptr<AttributeBase>> tempWindowAttribute = groupedAttributes;
-
-        return recurSearch(id, tempWindowAttribute, absPos);
-    }
-
-    // setPosition
-    Attribute & setPosition(const CRect & newPos) {
-        pos = newPos;
-        return *this;
-    }
-
-    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
-    {
-        printAttribute("Window", out, isPipe, true, true, false);
+    void printAttributeContainer(const string & attrName, ostream &out, vector<bool> isPipe, bool ignorePrefix, bool convertAbs) const {
+        printAttribute(attrName, out, isPipe, ignorePrefix, convertAbs);
         size_t counter = 0;
         isPipe.push_back(false);
-
-        for (const auto &attr: groupedAttributes) {
+        for (const auto &attr : attributes) {
+            CRect position = convertAbs ? calculateAbsolutePosition(m_ParentPos, M_Pos) : M_Pos;
+            attr->setParentPos(position);
             counter++;
-            if (counter != groupedAttributes.size()) {
-                isPipe[isPipe.size()-1] = true;
-            }
-            else {
-                isPipe[isPipe.size()-1] = false;
-            }
-            attr->setAbsPos(pos);
-            attr->print(out, isPipe, false);
-        }
-
-        return out;
-    }
-private:
-    vector<shared_ptr<AttributeBase>> groupedAttributes;
-};
-
-class CPanel: public Attribute{
-public:
-    CPanel(int id,
-           const CRect &relPos): Attribute(id, relPos, "") {};
-
-    CPanel(const CPanel & cw): Attribute(cw) {
-
-        copyVec(cw);
-    }
-
-    void copyVec(const CPanel & cw) {
-        vector<shared_ptr<AttributeBase>> newGroupedAttributes;
-
-        for (const auto& attr : cw.groupedAttributes) {
-            newGroupedAttributes.push_back(attr->clone());
-        }
-        swap(groupedAttributes, newGroupedAttributes);
-    }
-
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
-        return make_shared<CPanel>(*this);
-    }
-
-    CPanel & operator=(CPanel cw) {
-        swapAttribute(cw);
-        swap(groupedAttributes, cw.groupedAttributes);
-        return *this;
-    }
-
-    [[nodiscard]] const vector<shared_ptr<AttributeBase>> &getGroupAttributes() const override {
-        return groupedAttributes;
-    }
-
-    // search
-
-    CPanel & add(const Attribute & attr) {
-        groupedAttributes.push_back(attr.clone());
-        return *this;
-    }
-
-    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override {
-        printAttribute("Panel", out, isPipe, ignorePrefix, false, true);
-        size_t counter = 0;
-        isPipe.push_back(false);
-        for (const auto &attr : groupedAttributes) {
-            attr->setAbsPos(calculateAbsolutePosition(absPos, pos));
-            counter++;
-            if (counter == groupedAttributes.size()) {
+            if (counter == attributes.size()) {
                 isPipe[isPipe.size()-1] = false;
             } else {
                 isPipe[isPipe.size()-1] = true;
@@ -282,20 +192,106 @@ public:
 
             attr->print(out, isPipe, false);
         }
-
-        return out;
     }
-private:
-    vector<shared_ptr<AttributeBase>> groupedAttributes;
+protected:
+    vector<shared_ptr<CAttributeBase>> attributes;
 };
 
-class CButton: public Attribute {
+class CWindow: public CAttributeContainer {
+public:
+    CWindow(int id,
+            const string &title,
+            const CRect &parentPos): CAttributeContainer(id, title, parentPos) {};
+
+    CWindow(const CWindow & cw) = default;
+
+    CWindow & operator=(CWindow cw) {
+        swapAttribute(cw);
+        swap(attributes, cw.attributes);
+        return *this;
+    }
+
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
+        return make_shared<CWindow>(*this);
+    }
+
+    // add
+    CWindow & add(const CAttribute & attr) {
+        attributes.push_back(attr.clone());
+        return *this;
+    }
+
+    shared_ptr<CAttributeBase> recurSearch(int id, vector<shared_ptr<CAttributeBase>> & tempWindowAttribute, CRect parentPos) {
+
+        for (const auto &attr: tempWindowAttribute) {
+            if (attr->getId() == id) {
+                attr->setParentPos(parentPos);
+                return attr;
+            }
+            auto nextWindow = attr->getGroupAttributes();
+            if (!nextWindow.empty()) {
+                return recurSearch(id, nextWindow, calculateAbsolutePosition(parentPos, attr->getPos()));
+            }
+        }
+        return nullptr;
+
+    }
+
+    // search
+    shared_ptr<CAttributeBase> search(int id) {
+        vector<shared_ptr<CAttributeBase>> tempWindowAttribute = attributes;
+
+        return recurSearch(id, tempWindowAttribute, m_ParentPos);
+    }
+
+    // setPosition
+    CAttribute & setPosition(const CRect & newPos) {
+        M_Pos = newPos;
+        return *this;
+    }
+
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
+    {
+        printAttributeContainer("Window", out, isPipe, ignorePrefix, false);
+        return out;
+    }
+};
+
+class CPanel: public CAttributeContainer{
+public:
+    CPanel(int id,
+           const CRect &relPos): CAttributeContainer(id, "", relPos) {};
+
+    CPanel(const CPanel & cw) = default;
+
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
+        return make_shared<CPanel>(*this);
+    }
+
+    CPanel & operator=(CPanel cw) {
+        swapAttribute(cw);
+        swap(attributes, cw.attributes);
+        return *this;
+    }
+
+    CPanel & add(const CAttribute & attr) {
+        attributes.push_back(attr.clone());
+        return *this;
+    }
+
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override {
+        printAttributeContainer("Panel", out, isPipe, ignorePrefix, true);
+        return out;
+    }
+};
+
+class CButton: public CAttribute {
 public:
     CButton(int id,
             const CRect &relPos,
-            const string &name): Attribute(id, relPos, name) {};
+            const string &name): CAttribute(id, relPos, name) {};
 
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
         return make_shared<CButton>(*this);
     }
 
@@ -306,13 +302,13 @@ public:
     }
 };
 
-class CInput: public Attribute {
+class CInput: public CAttribute {
 public:
     CInput(int id,
            const CRect &relPos,
-           const string &value): Attribute(id, relPos, value) {};
+           const string &value): CAttribute(id, relPos, value) {};
 
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
         return make_shared<CInput>(*this);
     }
 
@@ -334,13 +330,13 @@ public:
     }
 };
 
-class CLabel: public Attribute {
+class CLabel: public CAttribute {
 public:
     CLabel(int id,
            const CRect &relPos,
-           const string &label): Attribute(id, relPos, label) {};
+           const string &label): CAttribute(id, relPos, label) {};
 
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
         return make_shared<CLabel>(*this);
     }
 
@@ -351,13 +347,13 @@ public:
     }
 };
 
-class CComboBox: public Attribute {
+class CComboBox: public CAttribute {
 public:
     CComboBox(int id,
-              const CRect &relPos): Attribute(id, relPos, ""), selectedIndex(0) {
+              const CRect &relPos): CAttribute(id, relPos, ""), selectedIndex(0) {
     };
 
-    [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
+    [[nodiscard]] shared_ptr<CAttributeBase> clone() const override{
         return make_shared<CComboBox>(*this);
     }
 
@@ -382,10 +378,10 @@ public:
     // 1 = without spaces, 2 = with |, 3 = with spaces
     [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
     {
-        printAttribute("ComboBox", out, isPipe, ignorePrefix, false, true);
+        printAttribute("ComboBox", out, isPipe, ignorePrefix, true);
         for (int i=0; i<(int)boxes.size(); i++) {
 
-            printStringSpaces(out, isPipe);
+            printElementPrefix(out, isPipe);
             if (i == selectedIndex) {
                 out << "+->" << boxes[i] << "<" << endl;
             }
@@ -401,7 +397,7 @@ private:
 };
 
 // output operators
-ostream &operator<<(ostream &out, const AttributeBase &self) {
+ostream &operator<<(ostream &out, const CAttributeBase &self) {
     return self.print(out, {}, true);
 }
 
@@ -770,6 +766,10 @@ int main() {
             "      +- Judo\n"
             "      +- Box\n"
             "      +- Progtest\n");
+
+    CWindow c(0, "Sample window", CRect(10, 10, 600, 480));
+    c.add(CPanel(12, CRect(0.1, 0.3, 0.8, 0.7))).add(CPanel(13, CRect(0.1, 0.3, 0.8, 0.7))).search(12);
+
     return EXIT_SUCCESS;
 }
 
