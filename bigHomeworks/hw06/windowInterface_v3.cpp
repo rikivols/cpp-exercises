@@ -1,49 +1,17 @@
 #ifndef __PROGTEST__
 
-#include <cstring>
 #include <cstdlib>
-#include <cstdio>
 #include <cctype>
-#include <cmath>
 #include <cassert>
-#include <typeinfo>
-#include <unistd.h>
 #include <iostream>
-#include <iomanip>
 #include <sstream>
 #include <utility>
 #include <vector>
-#include <list>
 #include <string>
-#include <map>
-#include <set>
-#include <unordered_map>
-#include <unordered_set>
-#include <functional>
 #include <memory>
-#include <algorithm>
-#include <type_traits>
 
 using namespace std;
 
-//void printWindowAttributes(const map<int, shared_ptr<AttributeBase>> & tempWindowAttribute) {
-//    cout << "printing map..." << endl;
-//    for (const auto &[id2, attr]: tempWindowAttribute) {
-//        cout << id2 << " : " << &attr << endl;
-//    }
-//    cout << "--------------" << endl;
-//}
-//
-//template <typename T>
-//void printVector(const vector<T> & vec) {
-//    cout << "printing order: " << endl;
-//
-//    cout << "[";
-//    for (size_t i=0; i<vec.size(); i++) {
-//        cout << vec[i] << ", ";
-//    }
-//    cout << "]" << endl;
-//}
 
 class CRect {
 public:
@@ -69,10 +37,6 @@ public:
 };
 
 #endif /* __PROGTEST__ */
-
-CRect copyCRect(const CRect &cRect) {
-    return {cRect.m_X, cRect.m_Y, cRect.m_W, cRect.m_H};
-}
 
 CRect calculateAbsolutePosition(const CRect & absolutePosition, const CRect & position) {
     return {absolutePosition.m_X + position.m_X * absolutePosition.m_W, absolutePosition.m_Y + position.m_Y * absolutePosition.m_H,
@@ -105,40 +69,26 @@ class AttributeBase {
 public:
     virtual ~AttributeBase() noexcept = default;
     virtual shared_ptr<AttributeBase> clone() const = 0;
-    virtual ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const = 0;
+    virtual ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const = 0;
     virtual const vector<shared_ptr<AttributeBase>> &getGroupAttributes() const = 0;
     virtual int getId() const = 0;
     virtual void setAbsPos(const CRect & poss) = 0;
-    virtual void setPrintConf(int conf) = 0;
-    virtual void setSpaces(int newSpaces) = 0;
     virtual const CRect & getPos() const = 0;
-    virtual void resetIsPipe() = 0;
 };
 
 
 class Attribute: public AttributeBase {
 public:
-    Attribute(int id, const CRect &pos, const string & txt): id(id), printConf(1), spaces(0),
-                                    pos(copyCRect(pos)), absPos(copyCRect(pos)), txt(txt){
-        vector<bool> isPipeNew;
+    Attribute(int id, const CRect &pos, string txt): id(id),
+                                    pos(pos), absPos(pos), txt(std::move(txt)){};
 
-        for (bool b : isPipe) {
-            isPipeNew.push_back(b);
-        }
-
-        isPipe = isPipeNew;
-    };
-
-    Attribute(const Attribute & attr): id(attr.id), printConf(attr.printConf), spaces(attr.spaces),
-                             pos(copyCRect(attr.pos)), absPos(copyCRect(pos)), txt(attr.txt), isPipe(attr.isPipe){};
+    Attribute(const Attribute & attr): id(attr.id), pos(attr.pos), absPos(pos), txt(attr.txt){};
 
     void swapAttribute(Attribute & attr) {
         swap(id, attr.id);
         swap(pos, attr.pos);
         swap(absPos, attr.absPos);
         swap(txt, attr.txt);
-        swap(printConf, attr.printConf);
-        swap(isPipe, attr.isPipe);
     }
 
     ~Attribute() noexcept override = default;
@@ -152,12 +102,12 @@ public:
         return make_shared<Attribute>(*this);
     }
 
-    ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override {
-        attrString("Panel", out, isPipe, false, false, true);
+    ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override {
+        printAttribute("Panel", out, isPipe, false, false, true);
         return out;
     };
 
-    void attrString(const string & attrName, ostream &out, const vector<bool> & isPipe, bool ignorePrefix=false, bool printTxt=true, bool convertAbs=true) const {
+    void printAttribute(const string & attrName, ostream &out, const vector<bool> & isPipe, bool ignorePrefix=false, bool printTxt=true, bool convertAbs=true) const {
         printStringSpaces(out, isPipe, true);
         if (!ignorePrefix) {
             out << "+- ";
@@ -173,54 +123,19 @@ public:
         return id;
     }
 
-    void setPrintConf(int conf) override {
-        printConf = conf;
-    }
-
-    int getPrintConf() const{
-        return printConf;
-    }
-
     void setAbsPos(const CRect & poss) override {
-        absPos = copyCRect(poss);
+        absPos = poss;
     }
 
     const CRect & getPos() const override {
         return pos;
     }
 
-    vector<bool> & getIsPipe() {
-        return isPipe;
-    }
-
-    void addIsPipe(bool isPipee) {
-        isPipe.push_back(isPipee);
-    }
-
-    void resetIsPipe() override {
-        isPipe.clear();
-    }
-
-    int getSpaces() const {
-        return spaces;
-    }
-
-    void addSpaces(int toAdd) {
-        spaces += toAdd;
-    }
-
-    void setSpaces(int newSpaces) override {
-        spaces = newSpaces;
-    }
-
 protected:
     int id;
-    int printConf;
-    int spaces;
     CRect pos;
     CRect absPos;
     string txt;
-    vector<bool> isPipe;
 };
 
 class CWindow: public Attribute {
@@ -262,11 +177,8 @@ public:
     shared_ptr<AttributeBase> recurSearch(int id, vector<shared_ptr<AttributeBase>> & tempWindowAttribute, CRect absPos) {
 
         for (const auto &attr: tempWindowAttribute) {
-
             if (attr->getId() == id) {
                 attr->setAbsPos(absPos);
-                attr->setPrintConf(1);
-                attr->setSpaces(0);
                 return attr;
             }
             auto nextWindow = attr->getGroupAttributes();
@@ -287,13 +199,13 @@ public:
 
     // setPosition
     Attribute & setPosition(const CRect & newPos) {
-        pos = copyCRect(newPos);
+        pos = newPos;
         return *this;
     }
 
-    [[nodiscard]] ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
     {
-        attrString("Window", out, isPipe, true, true, false);
+        printAttribute("Window", out, isPipe, true, true, false);
         size_t counter = 0;
         isPipe.push_back(false);
 
@@ -301,21 +213,12 @@ public:
             counter++;
             if (counter != groupedAttributes.size()) {
                 isPipe[isPipe.size()-1] = true;
-                attr->setPrintConf(2);
             }
             else {
                 isPipe[isPipe.size()-1] = false;
-                attr->setPrintConf(3);
             }
             attr->setAbsPos(pos);
-//            if (!attr->getWindowAttributes().empty()) {  // add spaces for panels
-//                attr->setSpaces(-1);
-////                cout << "spaces set: id: " << attr->getId() << " " << attr->getSpaces() << endl;
-//            }
-            attr->print(out, isFirst, isPipe);
-            attr->setSpaces(0);
-            attr->setPrintConf(1);
-            attr->resetIsPipe();
+            attr->print(out, isPipe, false);
         }
 
         return out;
@@ -361,30 +264,23 @@ public:
 
     CPanel & add(const Attribute & attr) {
         groupedAttributes.push_back(attr.clone());
-//        cout << "at add: " << endl;
         return *this;
     }
 
-    [[nodiscard]] ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override {
-        bool toIgnore = !(printConf == 2 || printConf == 3);
-        attrString("Panel", out, isPipe, toIgnore, false, true);
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override {
+        printAttribute("Panel", out, isPipe, ignorePrefix, false, true);
         size_t counter = 0;
         isPipe.push_back(false);
         for (const auto &attr : groupedAttributes) {
             attr->setAbsPos(calculateAbsolutePosition(absPos, pos));
             counter++;
             if (counter == groupedAttributes.size()) {
-                attr->setPrintConf(3);
                 isPipe[isPipe.size()-1] = false;
             } else {
-                attr->setPrintConf(2);
                 isPipe[isPipe.size()-1] = true;
             }
 
-            attr->print(out, false, isPipe);
-            attr->setSpaces(0);
-            attr->setPrintConf(1);
-            attr->resetIsPipe();
+            attr->print(out, isPipe, false);
         }
 
         return out;
@@ -403,10 +299,9 @@ public:
         return make_shared<CButton>(*this);
     }
 
-    [[nodiscard]] ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
     {
-        bool toIgnore = !(printConf == 2 || printConf == 3);
-        attrString("Button", out, isPipe, toIgnore);
+        printAttribute("Button", out, isPipe, ignorePrefix);
         return out;
     }
 };
@@ -432,10 +327,9 @@ public:
         return txt;
     }
 
-    [[nodiscard]] ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
     {
-        bool toIgnore = !(printConf == 2 || printConf == 3);
-        attrString("Input", out, isPipe, toIgnore);
+        printAttribute("Input", out, isPipe, ignorePrefix);
         return out;
     }
 };
@@ -450,10 +344,9 @@ public:
         return make_shared<CLabel>(*this);
     }
 
-    [[nodiscard]] ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
     {
-        bool toIgnore = !(printConf == 2 || printConf == 3);
-        attrString("Label", out, isPipe, toIgnore);
+        printAttribute("Label", out, isPipe, ignorePrefix);
         return out;
     }
 };
@@ -462,7 +355,6 @@ class CComboBox: public Attribute {
 public:
     CComboBox(int id,
               const CRect &relPos): Attribute(id, relPos, ""), selectedIndex(0) {
-        setPrintConf(2);
     };
 
     [[nodiscard]] shared_ptr<AttributeBase> clone() const override{
@@ -488,20 +380,12 @@ public:
     }
 
     // 1 = without spaces, 2 = with |, 3 = with spaces
-    [[nodiscard]] ostream &print(ostream &out, bool isFirst, vector<bool> isPipe) const override
+    [[nodiscard]] ostream &print(ostream &out, vector<bool> isPipe, bool ignorePrefix) const override
     {
-        bool toIgnore = !(printConf == 2 || printConf == 3);
-        attrString("ComboBox", out, isPipe, toIgnore, false, true);
+        printAttribute("ComboBox", out, isPipe, ignorePrefix, false, true);
         for (int i=0; i<(int)boxes.size(); i++) {
 
             printStringSpaces(out, isPipe);
-//            out << string(getSpaces(), ' ');
-//            if (printConf == 2) {
-//                out << "|  ";
-//            }
-//            else if (printConf == 3) {
-//                out << "   ";
-//            }
             if (i == selectedIndex) {
                 out << "+->" << boxes[i] << "<" << endl;
             }
@@ -518,19 +402,19 @@ private:
 
 // output operators
 ostream &operator<<(ostream &out, const AttributeBase &self) {
-    return self.print(out, true, {});
+    return self.print(out, {}, true);
 }
 
 #ifndef __PROGTEST__
 
-template<typename _T>
-string toString(const _T &x) {
+template<typename T>
+string toString(const T &x) {
     ostringstream oss;
     oss << x;
     return oss.str();
 }
 
-int main(void) {
+int main() {
     assert (sizeof(CButton) - sizeof(string) < sizeof(CComboBox) - sizeof(vector<string>));
     assert (sizeof(CInput) - sizeof(string) < sizeof(CComboBox) - sizeof(vector<string>));
     assert (sizeof(CLabel) - sizeof(string) < sizeof(CComboBox) - sizeof(vector<string>));
